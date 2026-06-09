@@ -21,7 +21,7 @@ from acestep.pipeline_ace_step import ACEStepPipeline
 
 print("Loading ACE-Step pipeline...")
 pipe = ACEStepPipeline(
-    checkpoint_dir="/workspace/models/acestep-v15-turbo",
+    checkpoint_dir="/workspace/models/models--ACE-Step--ACE-Step-v1-3.5B/snapshots/82cd0d7b6322bd28cd4e830fe675ddb6180ce36c",
     dtype="bfloat16"
 )
 print("Pipeline loaded!")
