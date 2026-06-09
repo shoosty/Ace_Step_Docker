@@ -4,8 +4,18 @@ import os
 import base64
 import tempfile
 import traceback
+import time
+import os
 
 sys.path.insert(0, '/ace-step-code')
+
+# Wait for volume to mount
+checkpoint = "/workspace/models/acestep-v15-turbo"
+for i in range(30):
+    if os.path.exists(checkpoint):
+        break
+    print(f"Waiting for volume... {i}")
+    time.sleep(2)
 
 from acestep.pipeline_ace_step import ACEStepPipeline
 
