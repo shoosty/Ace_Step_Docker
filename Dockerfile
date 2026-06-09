@@ -1,6 +1,6 @@
 FROM ghcr.io/ace-step/ace-step-1.5:0.1.8
 
-RUN python -m install runpod
+RUN uv pip install runpod --system
 
 COPY handler.py /app/handler.py
 
