@@ -22,6 +22,7 @@ RUN pip3.10 install torch torchaudio torchvision --index-url https://download.py
         runpod torchcodec typing_extensions \
         supabase && \
     pip3.10 install "click>=8.0"
+    pip3.10 install supabase
 
 RUN mkdir -p /app
 COPY handler.py /app/handler.py
