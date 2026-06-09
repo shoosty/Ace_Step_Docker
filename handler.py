@@ -10,7 +10,7 @@ import os
 sys.path.insert(0, '/ace-step-code')
 
 # Wait for volume to mount
-checkpoint = "/workspace/models/acestep-v15-turbo"
+checkpoint = "/workspace/models/models--ACE-Step--ACE-Step-v1-3.5B"
 for i in range(30):
     if os.path.exists(checkpoint):
         break
