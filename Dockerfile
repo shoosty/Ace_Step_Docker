@@ -7,7 +7,8 @@ RUN apt-get update && apt-get install -y python3.10 git curl && \
 RUN mkdir /ace-step-code && \
     git clone https://github.com/ace-step/ACE-Step.git /ace-step-code
 
-RUN pip3.10 install torch torchaudio torchvision --no-deps && \
+
+RUN pip3.10 install torch torchaudio torchvision --index-url https://download.pytorch.org/whl/cu121 && \
     pip3.10 install git+https://github.com/ace-step/ACE-Step.git --no-deps && \
     pip3.10 install fsspec jinja2 networkx sympy setuptools \
         diffusers transformers==4.50.0 accelerate peft soundfile \
