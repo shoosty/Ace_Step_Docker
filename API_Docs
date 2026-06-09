@@ -1,0 +1,323 @@
+# ACE-Step API Documentation
+## For Shoosty Studio / Dadbot Music Pipeline
+
+**Last Updated:** June 9, 2026  
+**Working Image:** `shoosty1/ace-step:v28`  
+**Endpoint:** `pd2iixy9kh509f`
+
+---
+
+## Quick Reference
+
+| Parameter | Type | Required | Limit |
+|-----------|------|----------|-------|
+| `caption` | string | yes | 512 characters max |
+| `lyrics` | string | no | ~4000 tokens shared with audio |
+| `duration` | integer | no | 10–600 seconds (default: 30) |
+| `lora_url` | string | no | URL to .safetensors file |
+
+---
+
+## API Endpoint
+
+```
+POST https://api.runpod.ai/v2/pd2iixy9kh509f/run
+```
+
+**Headers:**
+```
+Authorization: Bearer YOUR_RUNPOD_API_KEY
+Content-Type: application/json
+```
+
+---
+
+## Request Payload
+
+### Instrumental (no vocals)
+```json
+{
+  "input": {
+    "caption": "progressive synth, analog synthesizers, gated drums, bright catchy hook, spatial reverb, 120bpm",
+    "lyrics": "[Instrumental]",
+    "duration": 180
+  }
+}
+```
+
+### With Vocals
+```json
+{
+  "input": {
+    "caption": "progressive synth, analog synthesizers, gated drums, retrofuture, warm bass, 120bpm",
+    "lyrics": "[Verse 1]\nYour lyrics here\n\n[Chorus]\nYour chorus here\n\n[Bridge]\nYour bridge here",
+    "duration": 180
+  }
+}
+```
+
+### With LoRA (style fine-tuning)
+```json
+{
+  "input": {
+    "caption": "progressive synth, analog synthesizers, gated drums",
+    "lyrics": "[Verse 1]\nYour lyrics here",
+    "duration": 180,
+    "lora_url": "https://your-storage.com/your-lora.safetensors"
+  }
+}
+```
+
+---
+
+## Response
+
+```json
+{
+  "id": "job-id-here",
+  "status": "COMPLETED",
+  "output": {
+    "audio_b64": "base64-encoded WAV string"
+  }
+}
+```
+
+---
+
+## Decoding the Audio
+
+### JavaScript
+```javascript
+const audioBytes = atob(response.output.audio_b64);
+const byteArray = new Uint8Array(audioBytes.length);
+for (let i = 0; i < audioBytes.length; i++) {
+  byteArray[i] = audioBytes.charCodeAt(i);
+}
+const audioBlob = new Blob([byteArray], { type: 'audio/wav' });
+const audioUrl = URL.createObjectURL(audioBlob);
+const audio = new Audio(audioUrl);
+audio.play();
+```
+
+### Python
+```python
+import base64
+
+audio_data = base64.b64decode(response['output']['audio_b64'])
+with open('output.wav', 'wb') as f:
+    f.write(audio_data)
+```
+
+---
+
+## Lyrics Format
+
+ACE-Step supports structured lyrics with section tags. Use these markers:
+
+```
+[Verse 1]
+Line one of verse
+Line two of verse
+
+[Chorus]
+Your catchy hook
+Repeated hook line
+
+[Verse 2]
+Second verse content
+
+[Bridge]
+The bridge section
+
+[Outro]
+Final lines
+Fade out
+```
+
+**Special tags:**
+- `[Instrumental]` — no vocals, pure music
+- `[Instrumental break]` — instrumental section within a vocal song
+- `[Intro]` — opening section
+- `[Outro]` — closing section
+- `[Pre-chorus]` — build before chorus
+
+---
+
+## Caption Best Practices
+
+The caption is your style guide. Be specific:
+
+**Genre tags:** `progressive synth`, `indie pop`, `hip hop`, `synthwave`, `jazz fusion`
+
+**Instrument tags:** `analog synthesizers`, `gated drums`, `electric guitar`, `upright bass`, `string quartet`
+
+**Mood tags:** `melancholic`, `euphoric`, `driving`, `contemplative`, `anthemic`
+
+**Production tags:** `spatial reverb`, `wide stereo field`, `warm production`, `punchy kick`, `bright mix`
+
+**Tempo:** `80bpm`, `120bpm`, `fast tempo`, `slow ballad`
+
+**Example caption:**
+```
+progressive synth, analog synthesizers, gated drums, bright catchy hook, 
+spatial reverb, retrofuture, warm bass, punchy kick, arpeggiated synth lead, 
+wide stereo field, 80s influenced but modern production, driving tempo 120bpm
+```
+
+---
+
+## Duration Guide
+
+| Song Type | Duration |
+|-----------|----------|
+| Short clip / test | 10–30s |
+| Single verse | 45–60s |
+| Full pop song | 180–240s |
+| Epic / long form | 300–600s |
+
+**Note:** Longer songs with heavy lyrics may hit context limits. For songs over 3 minutes, use `[Instrumental]` breaks to give the model breathing room.
+
+---
+
+## LoRA Support
+
+LoRAs let you fine-tune the model for a specific style, voice, or artist. Pass a URL to a `.safetensors` file and the handler downloads and loads it per request.
+
+**Use cases:**
+- Dadbot voice model (train on Stephen's voice)
+- Genre-specific style (train on a specific artist's catalog)
+- Instrument style (train on a specific guitar tone)
+
+**LoRA file format:** PEFT adapter or LyCORIS LoKr (auto-detected)
+
+**Training:** Use ACE-Step 1.5's built-in LoRA training tab, or Side-Step CLI toolkit. LoKr training takes ~5 minutes on an RTX 3090.
+
+---
+
+## Polling for Results
+
+RunPod jobs are async. Poll for completion:
+
+```javascript
+async function generateMusic(input) {
+  // Submit job
+  const submitRes = await fetch(
+    `https://api.runpod.ai/v2/${ENDPOINT_ID}/run`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${RUNPOD_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ input })
+    }
+  );
+  const { id } = await submitRes.json();
+
+  // Poll for result
+  while (true) {
+    const statusRes = await fetch(
+      `https://api.runpod.ai/v2/${ENDPOINT_ID}/status/${id}`,
+      {
+        headers: { 'Authorization': `Bearer ${RUNPOD_API_KEY}` }
+      }
+    );
+    const result = await statusRes.json();
+
+    if (result.status === 'COMPLETED') {
+      return result.output.audio_b64;
+    }
+    if (result.status === 'FAILED') {
+      throw new Error(result.error);
+    }
+
+    await new Promise(r => setTimeout(r, 3000)); // poll every 3s
+  }
+}
+```
+
+---
+
+## Performance
+
+| Metric | Value |
+|--------|-------|
+| GPU | RTX 4090 |
+| Generation time | ~32 seconds per song |
+| Cold start | ~25 seconds |
+| Total first request | ~53 seconds |
+| Subsequent requests | ~32 seconds (warm) |
+| Audio quality | 48kHz stereo WAV |
+
+---
+
+## Error Handling
+
+The handler returns errors in the response rather than failing silently:
+
+```json
+{
+  "output": {
+    "error": "Models not found at /runpod-volume/...",
+    "traceback": "full Python traceback here"
+  }
+}
+```
+
+Always check for `output.error` before trying to decode `output.audio_b64`.
+
+---
+
+## Environment Variables (RunPod Endpoint)
+
+| Key | Value |
+|-----|-------|
+| `POLL_INTERVAL_SECONDS` | `3` |
+| `MAX_POLL_ATTEMPTS` | `120` |
+| `PYTORCH_CUDA_ALLOC_CONF` | `expandable_segments:True` |
+| `HF_TOKEN` | your HuggingFace token |
+
+---
+
+## Known Limitations
+
+- Caption hard limit: 512 characters
+- Max duration: 600 seconds (10 minutes)
+- With heavy lyrics, practical max ~3–4 minutes before context exhaustion
+- Base model vocals sound synthetic — use LoRA for character voice
+- First cold start after idle: ~25 extra seconds
+- Official ACE-Step v0.1.8 image requires CUDA 12.8 — RunPod currently at 12.4, use `shoosty1/ace-step:v28` instead
+
+---
+
+## Deploying a New Version
+
+```bash
+cd ~/Ace_Step_Docker
+git pull
+docker build --platform linux/amd64 -t shoosty1/ace-step:vXX .
+docker push shoosty1/ace-step:vXX
+```
+
+Then: RunPod → endpoint → Manage → New Release → `shoosty1/ace-step:vXX`
+
+---
+
+## The Lesson That Took 4 Days
+
+RunPod serverless mounts network volumes at `/runpod-volume` — **NOT** `/workspace`.
+
+The models were always there. Nobody looked in the right place.
+
+```python
+# WRONG - caused 27 failed versions
+checkpoint = "/workspace/models/..."
+
+# RIGHT - v28, works
+checkpoint = "/runpod-volume/models/..."
+```
+
+---
+
+*Built with love, suffering, and 28 Docker versions.*  
+*Dadbot lives at /runpod-volume.*
