@@ -9,7 +9,7 @@ import time
 sys.path.insert(0, '/ace-step-code')
 
 # Verify models exist - fail fast if not found
-checkpoint = "/workspace/models/models--ACE-Step--ACE-Step-v1-3.5B/snapshots/82cd0d7b6322bd28cd4e830fe675ddb6180ce36c"
+checkpoint = "/runpod-volume/models/models--ACE-Step--ACE-Step-v1-3.5B/snapshots/82cd0d7b6322bd28cd4e830fe675ddb6180ce36c"
 if not os.path.exists(checkpoint):
     raise RuntimeError(f"Models not found at {checkpoint} - check volume mount!")
 
