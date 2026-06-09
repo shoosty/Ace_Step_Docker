@@ -5,23 +5,21 @@ import base64
 import tempfile
 import traceback
 import time
-import os
 
 sys.path.insert(0, '/ace-step-code')
 
-# Wait for volume to mount
-checkpoint = "/workspace/models/models--ACE-Step--ACE-Step-v1-3.5B"
-for i in range(30):
-    if os.path.exists(checkpoint):
-        break
-    print(f"Waiting for volume... {i}")
-    time.sleep(2)
+# Verify models exist - fail fast if not found
+checkpoint = "/workspace/models/models--ACE-Step--ACE-Step-v1-3.5B/snapshots/82cd0d7b6322bd28cd4e830fe675ddb6180ce36c"
+if not os.path.exists(checkpoint):
+    raise RuntimeError(f"Models not found at {checkpoint} - check volume mount!")
+
+print(f"Models found at {checkpoint}")
 
 from acestep.pipeline_ace_step import ACEStepPipeline
 
 print("Loading ACE-Step pipeline...")
 pipe = ACEStepPipeline(
-    checkpoint_dir="/workspace/models/models--ACE-Step--ACE-Step-v1-3.5B/snapshots/82cd0d7b6322bd28cd4e830fe675ddb6180ce36c",
+    checkpoint_dir=checkpoint,
     dtype="bfloat16"
 )
 print("Pipeline loaded!")
