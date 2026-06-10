@@ -1,4 +1,4 @@
-FROM runpod/base:0.6.2-cuda12.1.0
+FROM --platform=linux/amd64 runpod/base:0.6.2-cuda12.1.0
 
 # ACE-Step 1.5 XL — v30
 # Supports MODEL_SIZE env var: "2b" or "xl" (default: xl)
