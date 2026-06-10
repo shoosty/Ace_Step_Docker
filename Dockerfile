@@ -11,7 +11,7 @@ RUN mkdir /ace-step-code && \
     git clone https://github.com/ace-step/ACE-Step-1.5.git /ace-step-code
 
 RUN pip3.11 install torch torchaudio torchvision --index-url https://download.pytorch.org/whl/cu121 && \
-    pip3.11 install -e /ace-step-code && \
+    pip3.11 install -e /ace-step-code --no-deps && \
     pip3.11 install fsspec jinja2 networkx sympy setuptools \
         diffusers transformers==4.50.0 accelerate peft soundfile \
         librosa loguru tqdm numpy click datasets==3.4.1 \
