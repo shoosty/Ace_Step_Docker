@@ -1,4 +1,4 @@
-"""ACE-Step v29 — URL-returning handler exposing the full pipeline.
+"""ACE-Step v30 — URL-returning handler exposing the full pipeline.
 
 Stephen 2026-06-09 requirements rolled into one image:
   - "we dont want the file as mp3 we want the url"
@@ -27,6 +27,7 @@ Required env vars on the worker:
   SUPABASE_URL              — https://<project>.supabase.co
   SUPABASE_SERVICE_ROLE_KEY — service-role JWT
   ACESTEP_BUCKET (optional) — default "song-uploads"
+  MODEL_SIZE (optional)     — "2b" or "xl" (default: "xl")
 
 CRITICAL: RunPod serverless mounts network volumes at /runpod-volume,
 NOT /workspace. Every path here uses /runpod-volume/.
@@ -45,15 +46,21 @@ import urllib.request
 
 sys.path.insert(0, '/ace-step-code')
 
-checkpoint = "/runpod-volume/models/models--ACE-Step--ACE-Step-v1-3.5B/snapshots/82cd0d7b6322bd28cd4e830fe675ddb6180ce36c"
+MODEL_SIZE = os.environ.get("MODEL_SIZE", "xl").lower()
+
+if MODEL_SIZE == "xl":
+    checkpoint = "/runpod-volume/models/ace-step-1.5-xl"
+else:
+    checkpoint = "/runpod-volume/models/ace-step-1.5-2b"
+
 if not os.path.exists(checkpoint):
     raise RuntimeError(f"Models not found at {checkpoint} - check volume mount!")
 
-print(f"Models found at {checkpoint}")
+print(f"Models found at {checkpoint} (MODEL_SIZE={MODEL_SIZE})")
 
 from acestep.pipeline_ace_step import ACEStepPipeline
 
-print("Loading ACE-Step pipeline...")
+print("Loading ACE-Step 1.5 pipeline...")
 pipe = ACEStepPipeline(
     checkpoint_dir=checkpoint,
     dtype="bfloat16"
@@ -86,10 +93,6 @@ def supabase_client():
     return _supabase_client
 
 # ── Full ACE-Step pipeline knob whitelist ──────────────────────────
-# Pass-through model: any key in event["input"] that matches one of
-# these names is forwarded verbatim to ACEStepPipeline.__call__. Names
-# match the upstream signature exactly (e.g. "infer_step" — singular,
-# no inference_steps). Defaults live in the pipeline.
 PIPELINE_KWARGS = [
     "audio_duration",
     "infer_step",
@@ -154,10 +157,6 @@ def upload_to_supabase(local_path: str, storage_path: str, content_type: str) ->
     return res
 
 def download_to_temp(url: str, suffix: str = ".bin") -> str:
-    """Pull a remote file into a local temp path. Used for
-    audio2audio / remaster / repaint modes where the caller provides
-    src_audio_url instead of a path (since the worker has no access
-    to the caller's filesystem)."""
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:
         local_path = f.name
     urllib.request.urlretrieve(url, local_path)
@@ -172,47 +171,33 @@ def handler(job):
       duration | audio_duration (float) — target seconds. Default 30.
       format (str)             — "mp3" (default) or "wav".
       keep_wav (bool)          — when format="mp3", ALSO upload the
-                                 wav and return wav_url. For "I'm
-                                 happy, give me lossless." Default
-                                 False.
-      storage_path (str)       — explicit object path. Default
-                                 "acestep-runs/<ts>-<id>.<ext>".
+                                 wav and return wav_url. Default False.
+      storage_path (str)       — explicit object path.
       storage_path_wav (str)   — explicit path for the keep_wav copy.
-                                 Default appends "-wav" before ext.
-      src_audio_url (str)      — for audio2audio/remaster/repaint/
-                                 edit: a public URL the handler will
-                                 download into a temp file and pass
-                                 to ACE-Step via src_audio_path.
-                                 Used in place of src_audio_path
-                                 when the caller can't share a local
-                                 path with the worker.
-      return_audio_b64 (bool)  — include bytes in the response too.
-                                 Lab-page convenience. Default False.
+      src_audio_url (str)      — for audio2audio/remaster/repaint/edit.
+      return_audio_b64 (bool)  — include bytes in response. Default False.
 
       ── Pipeline pass-through ───────────────────────────────
       Any key from PIPELINE_KWARGS is forwarded. Highlights:
         task ("text2music"|"retake"|"repaint"|"extend"|"edit"|
               "audio2audio")  — operation mode
-        manual_seeds (list)   — reproducibility / retake
-        retake_seeds (list)
-        retake_variance (float)
-        repaint_start / repaint_end (int seconds)
+        manual_seeds / retake_seeds / retake_variance
+        repaint_start / repaint_end
         edit_target_prompt / edit_target_lyrics
-        edit_n_min / edit_n_max / edit_n_avg
         audio2audio_enable / ref_audio_strength
-        lora_name_or_path / lora_weight  — the LoRA jukebox hook
-        infer_step / guidance_scale / scheduler_type / cfg_type / ...
+        lora_name_or_path / lora_weight
+        infer_step / guidance_scale / scheduler_type / cfg_type
 
     Output (success):
       {
-        "audio_url":   "<public URL>",
-        "format":      "mp3" | "wav",
-        "storage_path": "<path>",
-        "duration":    <float>,
-        "task":        "<mode>",
-        "wav_url":     "<URL>"   // only when keep_wav=true and format=mp3
-        "wav_storage_path": "<path>"
-        "audio_b64":   "<bytes>" // only when return_audio_b64=true
+        "audio_url":        "<public URL>",
+        "format":           "mp3" | "wav",
+        "storage_path":     "<path>",
+        "duration":         <float>,
+        "task":             "<mode>",
+        "wav_url":          "<URL>"    // only when keep_wav=true
+        "wav_storage_path": "<path>"   // only when keep_wav=true
+        "audio_b64":        "<bytes>"  // only when return_audio_b64=true
       }
 
     Output (failure):
@@ -222,17 +207,17 @@ def handler(job):
     try:
         inp = job.get("input", {}) or {}
 
-        caption = inp.get("caption", "pop music")
-        lyrics  = inp.get("lyrics",  "[Instrumental]")
+        caption  = inp.get("caption", "pop music")
+        lyrics   = inp.get("lyrics",  "[Instrumental]")
         duration = float(inp.get("audio_duration", inp.get("duration", 30)))
 
         fmt = (inp.get("format") or "mp3").lower()
         if fmt not in ("mp3", "wav"):
             return {"error": f"format must be 'mp3' or 'wav', got '{fmt}'"}
-        keep_wav = bool(inp.get("keep_wav", False)) and fmt == "mp3"
+        keep_wav   = bool(inp.get("keep_wav", False)) and fmt == "mp3"
         return_b64 = bool(inp.get("return_audio_b64", False))
 
-        ts = int(time.time())
+        ts       = int(time.time())
         short_id = uuid.uuid4().hex[:12]
         storage_path = inp.get("storage_path") or f"acestep-runs/{ts}-{short_id}.{fmt}"
         if not storage_path.endswith(f".{fmt}"):
@@ -243,7 +228,6 @@ def handler(job):
             base, _, _ = storage_path.rpartition(".")
             storage_path_wav = f"{base}-wav.wav"
 
-        # Pipeline kwargs whitelist pass-through.
         kwargs = {"audio_duration": duration}
         for key in PIPELINE_KWARGS:
             if key == "audio_duration":
@@ -251,9 +235,6 @@ def handler(job):
             if key in inp and inp[key] is not None:
                 kwargs[key] = inp[key]
 
-        # Remote source-audio support — when the caller can't share
-        # a filesystem path, they pass src_audio_url and we pull it
-        # local before handing the path to ACE-Step.
         src_audio_url = inp.get("src_audio_url")
         if src_audio_url:
             suffix = ".wav"
@@ -261,12 +242,10 @@ def handler(job):
                 suffix = "." + src_audio_url.rsplit(".", 1)[1].split("?")[0][:5]
             src_temp = download_to_temp(src_audio_url, suffix=suffix)
             kwargs["src_audio_path"] = src_temp
-            # audio2audio mode also needs ref_audio_input populated.
             if kwargs.get("task") == "audio2audio":
                 kwargs.setdefault("ref_audio_input", src_temp)
                 kwargs.setdefault("audio2audio_enable", True)
 
-        # Run.
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
             wav_path = f.name
         mp3_path = None
@@ -283,10 +262,10 @@ def handler(job):
                     mp3_path = f.name
                 wav_to_mp3(wav_path, mp3_path)
                 primary_local = mp3_path
-                primary_ct = "audio/mpeg"
+                primary_ct    = "audio/mpeg"
             else:
                 primary_local = wav_path
-                primary_ct = "audio/wav"
+                primary_ct    = "audio/wav"
 
             audio_url = upload_to_supabase(primary_local, storage_path, primary_ct)
 
@@ -300,7 +279,7 @@ def handler(job):
 
             if keep_wav:
                 wav_url = upload_to_supabase(wav_path, storage_path_wav, "audio/wav")
-                resp["wav_url"] = wav_url
+                resp["wav_url"]          = wav_url
                 resp["wav_storage_path"] = storage_path_wav
 
             if return_b64:
