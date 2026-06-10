@@ -1,1 +1,28 @@
+FROM runpod/base:0.6.2-cuda12.1.0
 
+# ACE-Step 1.5 XL — v30
+# Supports MODEL_SIZE env var: "2b" or "xl" (default: xl)
+
+RUN apt-get update && apt-get install -y python3.10 git curl ffmpeg && \
+    curl https://bootstrap.pypa.io/get-pip.py | python3.10 && \
+    apt-get clean
+
+RUN mkdir /ace-step-code && \
+    git clone https://github.com/ace-step/ACE-Step-1.5.git /ace-step-code
+
+RUN pip3.10 install torch torchaudio torchvision --index-url https://download.pytorch.org/whl/cu121 && \
+    pip3.10 install -e /ace-step-code && \
+    pip3.10 install fsspec jinja2 networkx sympy setuptools \
+        diffusers transformers accelerate peft soundfile \
+        librosa loguru tqdm numpy click datasets \
+        pytorch_lightning pypinyin num2words py3langid \
+        hangul-romanize spacy thinc hf_transfer \
+        runpod torchcodec typing_extensions \
+        supabase && \
+    pip3.10 install "click>=8.0"
+
+RUN mkdir -p /app
+
+COPY handler.py /app/handler.py
+
+CMD ["python3.10", "/app/handler.py"]
