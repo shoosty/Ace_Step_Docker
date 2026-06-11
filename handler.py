@@ -234,16 +234,25 @@ def handler(job):
             if key in inp and inp[key] is not None:
                 kwargs[key] = inp[key]
 
-        src_audio_url = inp.get("src_audio_url")
-        if src_audio_url:
-            suffix = ".wav"
-            if "." in src_audio_url.split("/")[-1]:
-                suffix = "." + src_audio_url.rsplit(".", 1)[1].split("?")[0][:5]
-            src_temp = download_to_temp(src_audio_url, suffix=suffix)
-            kwargs["src_audio_path"] = src_temp
-            if kwargs.get("task") == "audio2audio":
-                kwargs.setdefault("ref_audio_input", src_temp)
-                kwargs.setdefault("audio2audio_enable", True)
+src_audio_url = inp.get("src_audio_url")
+if src_audio_url:
+    suffix = ".wav"
+    if "." in src_audio_url.split("/")[-1]:
+        suffix = "." + src_audio_url.rsplit(".", 1)[1].split("?")[0][:5]
+    src_temp = download_to_temp(src_audio_url, suffix=suffix)
+    kwargs["src_audio_path"] = src_temp
+    if kwargs.get("task") == "audio2audio":
+        kwargs.setdefault("ref_audio_input", src_temp)
+        kwargs.setdefault("audio2audio_enable", True)
+
+# LoRA download from Supabase URL
+lora_url = inp.get("lora_url")
+lora_temp = None
+if lora_url:
+    lora_temp = download_to_temp(lora_url, suffix=".safetensors")
+    kwargs["lora_name_or_path"] = lora_temp
+    if "lora_weight" not in kwargs:
+        kwargs["lora_weight"] = inp.get("lora_weight", 1.0)
 
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
             wav_path = f.name
