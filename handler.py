@@ -151,7 +151,20 @@ def handler(job):
 
         with tempfile.TemporaryDirectory() as save_dir:
             result = generate_music(dit_handler, llm_handler, params, config, save_dir=save_dir)
-            wav_path = result.audio_paths[0] if hasattr(result, "audio_paths") else result.audio_path
+            if hasattr(result, "audio_paths") and result.audio_paths:
+            wav_path = result.audio_paths[0]
+        elif hasattr(result, "audio_path"):
+            wav_path = result.audio_path
+        elif hasattr(result, "output_path"):
+            wav_path = result.output_path
+        elif hasattr(result, "save_paths") and result.save_paths:
+            wav_path = result.save_paths[0]
+else:
+    import glob
+    wavs = glob.glob(f"{save_dir}/*.wav") + glob.glob(f"{save_dir}/*.flac")
+    if not wavs:
+        return {"error": f"No audio found. Result attrs: {dir(result)}"}
+    wav_path = wavs[0]
 
             mp3_path = None
             if fmt == "mp3":
