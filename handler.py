@@ -1,8 +1,4 @@
-"""ACE-Step v33 — 1.5 XL with proper handler architecture.
-
-Uses the new AceStepHandler + LLMHandler split introduced in 1.5.
-Models live at /runpod-volume/checkpoints/ (symlinked from /models).
-"""
+"""ACE-Step v35 — 1.5 XL with proper handler architecture."""
 import runpod
 import sys
 import os
@@ -14,6 +10,7 @@ import shutil
 import time
 import uuid
 import urllib.request
+import glob
 
 sys.path.insert(0, '/ace-step-code')
 
@@ -98,6 +95,21 @@ def download_to_temp(url: str, suffix: str = ".bin") -> str:
     urllib.request.urlretrieve(url, local_path)
     return local_path
 
+def find_audio_file(result, save_dir):
+    """Locate the audio file from a GenerationResult."""
+    if hasattr(result, "audio_paths") and result.audio_paths:
+        return result.audio_paths[0]
+    if hasattr(result, "audio_path"):
+        return result.audio_path
+    if hasattr(result, "output_path"):
+        return result.output_path
+    if hasattr(result, "save_paths") and result.save_paths:
+        return result.save_paths[0]
+    wavs = glob.glob(f"{save_dir}/*.wav") + glob.glob(f"{save_dir}/*.flac")
+    if wavs:
+        return wavs[0]
+    return None
+
 def handler(job):
     """RunPod serverless entrypoint."""
     src_temp = None
@@ -126,45 +138,25 @@ def handler(job):
             base, _, _ = storage_path.rpartition(".")
             storage_path_wav = f"{base}-wav.wav"
 
-        # LoRA on-demand
         lora_url = inp.get("lora_url")
         if lora_url:
             lora_temp = download_to_temp(lora_url, suffix=".safetensors")
 
-        # Build params for 1.5
-        params = GenerationParams(
-            caption=caption,
-            duration=duration,
-        )
-        if inp.get("lyrics"):
+        params = GenerationParams(caption=caption, duration=duration)
+        if lyrics:
             params.lyrics = lyrics
         if lora_temp:
             params.lora_path = lora_temp
             params.lora_weight = float(inp.get("lora_weight", 1.0))
-        if inp.get("manual_seeds"):
-            params.seed = int(inp["manual_seeds"][0]) if isinstance(inp["manual_seeds"], list) else int(inp["manual_seeds"])
 
-        config = GenerationConfig(
-            batch_size=1,
-            audio_format="wav",
-        )
+        config = GenerationConfig(batch_size=1, audio_format="wav")
 
         with tempfile.TemporaryDirectory() as save_dir:
             result = generate_music(dit_handler, llm_handler, params, config, save_dir=save_dir)
-            if hasattr(result, "audio_paths") and result.audio_paths:
-            wav_path = result.audio_paths[0]
-        elif hasattr(result, "audio_path"):
-            wav_path = result.audio_path
-        elif hasattr(result, "output_path"):
-            wav_path = result.output_path
-        elif hasattr(result, "save_paths") and result.save_paths:
-            wav_path = result.save_paths[0]
-else:
-    import glob
-    wavs = glob.glob(f"{save_dir}/*.wav") + glob.glob(f"{save_dir}/*.flac")
-    if not wavs:
-        return {"error": f"No audio found. Result attrs: {dir(result)}"}
-    wav_path = wavs[0]
+
+            wav_path = find_audio_file(result, save_dir)
+            if not wav_path:
+                return {"error": f"No audio file found. Result attrs: {dir(result)}"}
 
             mp3_path = None
             if fmt == "mp3":
