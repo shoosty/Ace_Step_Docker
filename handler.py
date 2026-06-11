@@ -1,27 +1,10 @@
-"""ACE-Step v30 — URL-returning handler exposing the full pipeline.
+"""ACE-Step v31 — URL-returning handler with LoRA-on-demand support.
 
-Stephen 2026-06-09 requirements rolled into one image:
-  - "we dont want the file as mp3 we want the url"
-        → handler uploads to Supabase and returns a public URL.
-          RunPod's 10MB response cap never gets exercised because the
-          response is just a small JSON envelope.
-  - "I want to make sure we expose everything we can use"
-        → every keyword arg ACEStepPipeline.__call__ accepts is
-          pass-through from event["input"]. Task switching (retake /
-          repaint / extend / edit / audio2audio) is one input field.
-  - "grab the wav file when we are happy"
-        → keep_wav: true uploads BOTH mp3 (small, fast playback) and
-          a lossless wav (larger, for download). Returns wav_url
-          alongside audio_url.
-  - "remaster it through ace when we are done to clean it up"
-        → use task="audio2audio" with src_audio_path pointing at the
-          original (or a stem) + low ref_audio_strength. Wired on the
-          studio side; the handler just passes the params through.
-  - "stems, loras and anything else"
-        → lora_name_or_path + lora_weight pass-through. Studio can
-          run two jobs back-to-back with Lyric2Vocal and Text2Samples
-          LoRAs to produce vocal + instrumental stems until upstream
-          StemGen ships. Same seed for alignment.
+Stephen 2026-06-11 updates:
+  - Added lora_url support — handler downloads LoRA from Supabase
+    URL on-demand instead of requiring local volume copies. Keeps
+    LoRA library in one source of truth, instantly synced across
+    all regional endpoints.
 
 Required env vars on the worker:
   SUPABASE_URL              — https://<project>.supabase.co
@@ -52,6 +35,7 @@ if MODEL_SIZE == "xl":
     checkpoint = "/runpod-volume/models/acestep-v15-base"
 else:
     checkpoint = "/runpod-volume/models/acestep-v15-turbo"
+
 if not os.path.exists(checkpoint):
     raise RuntimeError(f"Models not found at {checkpoint} - check volume mount!")
 
@@ -76,9 +60,6 @@ ACESTEP_BUCKET = os.environ.get("ACESTEP_BUCKET", "song-uploads")
 
 _supabase_client = None
 def supabase_client():
-    """Singleton. Imported lazily so missing env vars surface as a
-    per-job error in the response rather than a boot-time crash that
-    only shows up in RunPod's worker logs."""
     global _supabase_client
     if _supabase_client is not None:
         return _supabase_client
@@ -91,7 +72,6 @@ def supabase_client():
     _supabase_client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
     return _supabase_client
 
-# ── Full ACE-Step pipeline knob whitelist ──────────────────────────
 PIPELINE_KWARGS = [
     "audio_duration",
     "infer_step",
@@ -164,45 +144,18 @@ def download_to_temp(url: str, suffix: str = ".bin") -> str:
 def handler(job):
     """RunPod serverless entrypoint.
 
-    Inputs (all optional unless noted):
-      caption (str)            — style brief. Default "pop music".
-      lyrics  (str)            — lyric sheet. Default "[Instrumental]".
-      duration | audio_duration (float) — target seconds. Default 30.
-      format (str)             — "mp3" (default) or "wav".
-      keep_wav (bool)          — when format="mp3", ALSO upload the
-                                 wav and return wav_url. Default False.
-      storage_path (str)       — explicit object path.
-      storage_path_wav (str)   — explicit path for the keep_wav copy.
-      src_audio_url (str)      — for audio2audio/remaster/repaint/edit.
-      return_audio_b64 (bool)  — include bytes in response. Default False.
+    Inputs:
+      caption, lyrics, duration, format, keep_wav, src_audio_url,
+      lora_url, lora_weight, return_audio_b64, storage_path
+      + all PIPELINE_KWARGS pass-through.
 
-      ── Pipeline pass-through ───────────────────────────────
-      Any key from PIPELINE_KWARGS is forwarded. Highlights:
-        task ("text2music"|"retake"|"repaint"|"extend"|"edit"|
-              "audio2audio")  — operation mode
-        manual_seeds / retake_seeds / retake_variance
-        repaint_start / repaint_end
-        edit_target_prompt / edit_target_lyrics
-        audio2audio_enable / ref_audio_strength
-        lora_name_or_path / lora_weight
-        infer_step / guidance_scale / scheduler_type / cfg_type
-
-    Output (success):
-      {
-        "audio_url":        "<public URL>",
-        "format":           "mp3" | "wav",
-        "storage_path":     "<path>",
-        "duration":         <float>,
-        "task":             "<mode>",
-        "wav_url":          "<URL>"    // only when keep_wav=true
-        "wav_storage_path": "<path>"   // only when keep_wav=true
-        "audio_b64":        "<bytes>"  // only when return_audio_b64=true
-      }
-
-    Output (failure):
-      { "error": "<message>", "traceback": "<full trace>" }
+    LoRA on-demand:
+      Pass lora_url pointing to a Supabase storage URL. Handler
+      downloads the LoRA to a temp path and feeds it to the
+      pipeline. Cleaned up after the job completes.
     """
     src_temp = None
+    lora_temp = None
     try:
         inp = job.get("input", {}) or {}
 
@@ -234,25 +187,24 @@ def handler(job):
             if key in inp and inp[key] is not None:
                 kwargs[key] = inp[key]
 
-src_audio_url = inp.get("src_audio_url")
-if src_audio_url:
-    suffix = ".wav"
-    if "." in src_audio_url.split("/")[-1]:
-        suffix = "." + src_audio_url.rsplit(".", 1)[1].split("?")[0][:5]
-    src_temp = download_to_temp(src_audio_url, suffix=suffix)
-    kwargs["src_audio_path"] = src_temp
-    if kwargs.get("task") == "audio2audio":
-        kwargs.setdefault("ref_audio_input", src_temp)
-        kwargs.setdefault("audio2audio_enable", True)
+        src_audio_url = inp.get("src_audio_url")
+        if src_audio_url:
+            suffix = ".wav"
+            if "." in src_audio_url.split("/")[-1]:
+                suffix = "." + src_audio_url.rsplit(".", 1)[1].split("?")[0][:5]
+            src_temp = download_to_temp(src_audio_url, suffix=suffix)
+            kwargs["src_audio_path"] = src_temp
+            if kwargs.get("task") == "audio2audio":
+                kwargs.setdefault("ref_audio_input", src_temp)
+                kwargs.setdefault("audio2audio_enable", True)
 
-# LoRA download from Supabase URL
-lora_url = inp.get("lora_url")
-lora_temp = None
-if lora_url:
-    lora_temp = download_to_temp(lora_url, suffix=".safetensors")
-    kwargs["lora_name_or_path"] = lora_temp
-    if "lora_weight" not in kwargs:
-        kwargs["lora_weight"] = inp.get("lora_weight", 1.0)
+        # LoRA on-demand download
+        lora_url = inp.get("lora_url")
+        if lora_url:
+            lora_temp = download_to_temp(lora_url, suffix=".safetensors")
+            kwargs["lora_name_or_path"] = lora_temp
+            if "lora_weight" not in kwargs:
+                kwargs["lora_weight"] = inp.get("lora_weight", 1.0)
 
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
             wav_path = f.name
@@ -310,6 +262,11 @@ if lora_url:
         if src_temp and os.path.exists(src_temp):
             try:
                 os.unlink(src_temp)
+            except OSError:
+                pass
+        if lora_temp and os.path.exists(lora_temp):
+            try:
+                os.unlink(lora_temp)
             except OSError:
                 pass
 
