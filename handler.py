@@ -36,8 +36,7 @@ MODEL_SIZE = os.environ.get("MODEL_SIZE", "xl").lower()
 # (vae, embeddings, LM, DiT variants). MODEL_SIZE controls which DiT
 # variant the pipeline loads via env var to ACE-Step itself.
 checkpoint = "/runpod-volume/models"
-os.environ["ACESTEP_DIT_VARIANT"] = "xl-base" if MODEL_SIZE == "xl" else "turbo"
-
+os.environ["ACESTEP_DIT_VARIANT"] = "acestep-v15-xl-base" if MODEL_SIZE == "xl" else "acestep-v15-turbo"
 if not os.path.exists(checkpoint):
     raise RuntimeError(f"Models not found at {checkpoint} - check volume mount!")
 
