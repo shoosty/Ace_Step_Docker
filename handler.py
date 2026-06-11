@@ -97,14 +97,17 @@ def download_to_temp(url: str, suffix: str = ".bin") -> str:
 
 def find_audio_file(result, save_dir):
     """Locate the audio file from a GenerationResult."""
-    if hasattr(result, "audio_paths") and result.audio_paths:
-        return result.audio_paths[0]
-    if hasattr(result, "audio_path"):
-        return result.audio_path
-    if hasattr(result, "output_path"):
-        return result.output_path
-    if hasattr(result, "save_paths") and result.save_paths:
-        return result.save_paths[0]
+    if hasattr(result, "audios") and result.audios:
+        first = result.audios[0]
+        if isinstance(first, str):
+            return first
+        if hasattr(first, "path"):
+            return first.path
+        if hasattr(first, "audio_path"):
+            return first.audio_path
+        if isinstance(first, dict):
+            return first.get("path") or first.get("audio_path")
+    import glob
     wavs = glob.glob(f"{save_dir}/*.wav") + glob.glob(f"{save_dir}/*.flac")
     if wavs:
         return wavs[0]
