@@ -31,10 +31,12 @@ sys.path.insert(0, '/ace-step-code')
 
 MODEL_SIZE = os.environ.get("MODEL_SIZE", "xl").lower()
 
-if MODEL_SIZE == "xl":
-    checkpoint = "/runpod-volume/models/acestep-v15-base"
-else:
-    checkpoint = "/runpod-volume/models/acestep-v15-turbo"
+
+# ACE-Step 1.5 needs the parent dir containing all model subfolders
+# (vae, embeddings, LM, DiT variants). MODEL_SIZE controls which DiT
+# variant the pipeline loads via env var to ACE-Step itself.
+checkpoint = "/runpod-volume/models"
+os.environ["ACESTEP_DIT_VARIANT"] = "xl-base" if MODEL_SIZE == "xl" else "turbo"
 
 if not os.path.exists(checkpoint):
     raise RuntimeError(f"Models not found at {checkpoint} - check volume mount!")
