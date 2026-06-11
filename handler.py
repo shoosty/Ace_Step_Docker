@@ -49,10 +49,9 @@ sys.path.insert(0, '/ace-step-code')
 MODEL_SIZE = os.environ.get("MODEL_SIZE", "xl").lower()
 
 if MODEL_SIZE == "xl":
-    checkpoint = "/runpod-volume/models/ace-step-1.5-xl"
+    checkpoint = "/runpod-volume/models/acestep-v15-base"
 else:
-    checkpoint = "/runpod-volume/models/ace-step-1.5-2b"
-
+    checkpoint = "/runpod-volume/models/acestep-v15-turbo"
 if not os.path.exists(checkpoint):
     raise RuntimeError(f"Models not found at {checkpoint} - check volume mount!")
 
