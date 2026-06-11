@@ -1,6 +1,6 @@
 FROM --platform=linux/amd64 runpod/base:0.6.2-cuda12.1.0
 
-# ACE-Step 1.5 XL — v34
+# ACE-Step 1.5 XL — v36
 # Supports MODEL_SIZE env var: "2b" or "xl" (default: xl)
 
 RUN apt-get update && apt-get install -y python3.11 python3.11-dev git curl ffmpeg && \
