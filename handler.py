@@ -36,7 +36,7 @@ try:
 
     dit_handler.initialize_service(
         project_root="/runpod-volume",
-        config_path=dit_variant,
+        config_path=os.path.join(CHECKPOINTS_DIR, dit_variant),
         device="cuda",
     )
 

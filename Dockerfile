@@ -1,6 +1,6 @@
 FROM --platform=linux/amd64 runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
 
-# ACE-Step 1.5 XL — v42
+# ACE-Step 1.5 XL — v43
 # Universal CUDA 12.8 — supports RTX 4090, 5090, A100, H100
 
 RUN apt-get update && apt-get install -y git curl ffmpeg && apt-get clean
