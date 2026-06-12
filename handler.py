@@ -60,8 +60,16 @@ if not shutil.which("ffmpeg"):
     print("WARNING: ffmpeg not on PATH — MP3 conversion will fall back to WAV.")
 
 # ── Supabase client ────────────────────────────────────────────────
+# Stephen 2026-06-12: accept either env name so a key-format rotation
+# (legacy JWT eyJ... → newer sb_secret_...) doesn't break the upload.
+# SUPABASE_SERVICE_ROLE_KEY is the legacy service-role JWT; the newer
+# SUPABASE_SECRET_KEY is Supabase's "secret API key" format. Either
+# is valid against Supabase Storage with full bucket permissions.
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+SUPABASE_KEY = (
+    os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+    or os.environ.get("SUPABASE_SECRET_KEY")
+)
 ACESTEP_BUCKET = os.environ.get("ACESTEP_BUCKET", "song-uploads")
 
 _supabase_client = None
@@ -69,10 +77,14 @@ def supabase_client():
     global _supabase_client
     if _supabase_client is not None:
         return _supabase_client
-    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
-        raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set.")
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        raise RuntimeError(
+            "SUPABASE_URL plus either SUPABASE_SERVICE_ROLE_KEY (legacy JWT) "
+            "or SUPABASE_SECRET_KEY (newer format) must be set on this "
+            "RunPod endpoint for URL-based uploads."
+        )
     from supabase import create_client
-    _supabase_client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+    _supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
     return _supabase_client
 
 def wav_to_mp3(wav_path: str, mp3_path: str, bitrate: str = "192k") -> None:
