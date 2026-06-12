@@ -24,8 +24,6 @@ dit_variant = "acestep-v15-xl-base" if MODEL_SIZE == "xl" else "acestep-v15-turb
 lm_variant = "acestep-5Hz-lm-1.7B"
 
 os.environ["ACESTEP_CHECKPOINTS_DIR"] = CHECKPOINTS_DIR
-os.environ["ACCELERATE_USE_EAGER_LOAD"] = "1"
-os.environ["TRANSFORMERS_OFFLINE"] = "1"
 
 try:
     print(f"Loading ACE-Step 1.5 (DiT={dit_variant}, LM={lm_variant})...")
