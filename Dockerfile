@@ -1,4 +1,4 @@
-FROM --platform=linux/amd64 runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04
+FROM --platform=linux/amd64 runpod/pytorch:2.4.0-py3.11-cuda12.4.1-cudnn-devel-ubuntu22.04
 
 # ACE-Step 1.5 XL — v37
 # Universal CUDA 12.8 — supports RTX 4090, 5090, A100, H100
