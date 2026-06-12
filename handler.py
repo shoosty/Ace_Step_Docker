@@ -34,11 +34,14 @@ try:
     dit_handler = AceStepHandler()
     llm_handler = LLMHandler()
 
-    dit_handler.initialize_service(
+    init_status, enable_generate = dit_handler.initialize_service(
         project_root="/runpod-volume",
-        config_path=os.path.join(CHECKPOINTS_DIR, dit_variant),
+        config_path=dit_variant,
         device="cuda",
     )
+    print(f"DEBUG dit init_status={init_status} enable_generate={enable_generate}")
+    if not enable_generate:
+        raise RuntimeError(f"DiT model initialization failed: {init_status}")
 
     llm_handler.initialize(
         checkpoint_dir=CHECKPOINTS_DIR,
