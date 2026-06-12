@@ -25,29 +25,33 @@ lm_variant = "acestep-5Hz-lm-1.7B"
 
 os.environ["ACESTEP_CHECKPOINTS_DIR"] = CHECKPOINTS_DIR
 
-print(f"Loading ACE-Step 1.5 (DiT={dit_variant}, LM={lm_variant})...")
+try:
+    print(f"Loading ACE-Step 1.5 (DiT={dit_variant}, LM={lm_variant})...")
+    from acestep.handler import AceStepHandler
+    from acestep.llm_inference import LLMHandler
+    from acestep.inference import GenerationParams, GenerationConfig, generate_music
 
-from acestep.handler import AceStepHandler
-from acestep.llm_inference import LLMHandler
-from acestep.inference import GenerationParams, GenerationConfig, generate_music
+    dit_handler = AceStepHandler()
+    llm_handler = LLMHandler()
 
-dit_handler = AceStepHandler()
-llm_handler = LLMHandler()
+    dit_handler.initialize_service(
+        project_root="/runpod-volume",
+        config_path=dit_variant,
+        device="cuda",
+    )
 
-dit_handler.initialize_service(
-    project_root="/runpod-volume",
-    config_path=dit_variant,
-    device="cuda",
-)
-
-llm_handler.initialize(
-    checkpoint_dir=CHECKPOINTS_DIR,
-    lm_model_path=lm_variant,
-    backend="vllm",
-    device="cuda",
-)
-
-print("Pipeline loaded!")
+    llm_handler.initialize(
+        checkpoint_dir=CHECKPOINTS_DIR,
+        lm_model_path=lm_variant,
+        backend="vllm",
+        device="cuda",
+    )
+    print("Pipeline loaded!")
+except Exception as e:
+    import traceback
+    print(f"STARTUP ERROR: {e}")
+    print(traceback.format_exc())
+    raise
 
 if not shutil.which("ffmpeg"):
     print("WARNING: ffmpeg not on PATH — MP3 conversion will fall back to WAV.")
