@@ -10,7 +10,7 @@ RUN mkdir /ace-step-code && \
 
 RUN pip install -e /ace-step-code --no-deps && \
     pip install fsspec jinja2 networkx sympy setuptools \
-        diffusers "transformers>=4.55.0" accelerate peft soundfile \
+        diffusers "transformers==4.46.0" accelerate peft soundfile \
         librosa loguru tqdm numpy click datasets==3.4.1 \
         pytorch_lightning==2.5.1 pypinyin num2words py3langid \
         hangul-romanize spacy thinc hf_transfer \
