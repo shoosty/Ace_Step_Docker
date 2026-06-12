@@ -1,4 +1,4 @@
-"""ACE-Step v35 — 1.5 XL with proper handler architecture."""
+"""ACE-Step v41 — 1.5 XL with proper handler architecture."""
 import runpod
 import sys
 import os
@@ -99,7 +99,6 @@ def find_audio_file(result, save_dir):
     """Locate the audio file from a GenerationResult."""
     if hasattr(result, "audios") and result.audios:
         first = result.audios[0]
-        # Log what we have for debugging
         print(f"DEBUG audios[0] type: {type(first)}, value: {first}")
         if isinstance(first, str):
             return first
@@ -112,14 +111,12 @@ def find_audio_file(result, save_dir):
         if isinstance(first, dict):
             print(f"DEBUG dict keys: {first.keys()}")
             return first.get("path") or first.get("audio_path") or first.get("save_path")
-        # Try all attributes
         print(f"DEBUG audios[0] attrs: {dir(first)}")
         for attr in dir(first):
             if not attr.startswith("_"):
                 val = getattr(first, attr)
                 if isinstance(val, str) and val.endswith((".wav", ".mp3", ".flac")):
                     return val
-    import glob
     wavs = glob.glob(f"{save_dir}/*.wav") + glob.glob(f"{save_dir}/*.flac")
     if wavs:
         return wavs[0]
@@ -168,6 +165,11 @@ def handler(job):
 
         with tempfile.TemporaryDirectory() as save_dir:
             result = generate_music(dit_handler, llm_handler, params, config, save_dir=save_dir)
+
+            print(f"DEBUG success={result.success} error={result.error} status={result.status_message} audios={result.audios}")
+
+            if not result.success:
+                return {"error": f"generate_music failed: {result.error} | {result.status_message}"}
 
             wav_path = find_audio_file(result, save_dir)
             if not wav_path:
