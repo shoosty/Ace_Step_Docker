@@ -19,9 +19,6 @@ RUN pip install -e /ace-step-code --no-deps && \
         supabase && \
     pip install "click>=8.0"
 
-ENV TRANSFORMERS_OFFLINE=1
-ENV HF_DATASETS_OFFLINE=1
-
 RUN mkdir -p /app
 COPY handler.py /app/handler.py
 
