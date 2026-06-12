@@ -99,14 +99,26 @@ def find_audio_file(result, save_dir):
     """Locate the audio file from a GenerationResult."""
     if hasattr(result, "audios") and result.audios:
         first = result.audios[0]
+        # Log what we have for debugging
+        print(f"DEBUG audios[0] type: {type(first)}, value: {first}")
         if isinstance(first, str):
             return first
         if hasattr(first, "path"):
             return first.path
         if hasattr(first, "audio_path"):
             return first.audio_path
+        if hasattr(first, "save_path"):
+            return first.save_path
         if isinstance(first, dict):
-            return first.get("path") or first.get("audio_path")
+            print(f"DEBUG dict keys: {first.keys()}")
+            return first.get("path") or first.get("audio_path") or first.get("save_path")
+        # Try all attributes
+        print(f"DEBUG audios[0] attrs: {dir(first)}")
+        for attr in dir(first):
+            if not attr.startswith("_"):
+                val = getattr(first, attr)
+                if isinstance(val, str) and val.endswith((".wav", ".mp3", ".flac")):
+                    return val
     import glob
     wavs = glob.glob(f"{save_dir}/*.wav") + glob.glob(f"{save_dir}/*.flac")
     if wavs:
