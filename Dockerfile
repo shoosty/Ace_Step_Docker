@@ -23,7 +23,7 @@ print('Patched configuration_acestep_v15.py')
 
 RUN pip install -e /ace-step-code --no-deps && \
     pip install fsspec jinja2 networkx sympy setuptools \
-        "diffusers==0.31.0" "transformers>=4.51.0,<4.58.0" accelerate peft soundfile \
+        "diffusers==0.37.0" "transformers>=4.51.0,<4.58.0" accelerate peft soundfile \
         librosa loguru tqdm numpy click "datasets==3.4.1" \
         "pytorch_lightning==2.5.1" pypinyin num2words py3langid \
         hangul-romanize spacy thinc hf_transfer \
