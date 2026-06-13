@@ -134,6 +134,23 @@ def wav_to_mp3(wav_path: str, mp3_path: str, bitrate: str = "192k") -> None:
     )
 
 def upload_to_supabase(local_path: str, storage_path: str, content_type: str) -> str:
+    # v55 — reprint the env diagnostic right before the upload so the
+    # diag block sits adjacent to the failure traceback (no scrolling
+    # back to container startup logs). Stephen 2026-06-13.
+    print(
+        f"[v55 upload diag] bucket={ACESTEP_BUCKET!r} path={storage_path!r} "
+        f"ct={content_type!r} file_bytes={os.path.getsize(local_path)}"
+    )
+    print(f"[v55 env diag (per-job)]")
+    print(f"  SUPABASE_URL={SUPABASE_URL!r}")
+    print(f"  {_diag_keyfrag('SUPABASE_SERVICE_ROLE_KEY', SUPABASE_SERVICE_ROLE_KEY_RAW)}")
+    print(f"  {_diag_keyfrag('SUPABASE_SECRET_KEY', SUPABASE_SECRET_KEY_RAW)}")
+    if SUPABASE_KEY is None:
+        print("  → NO key visible. Upload WILL fail (was about to call Storage API).")
+    elif "\n" in (SUPABASE_KEY or ""):
+        print("  → key contains newline(s). HTTP header rejected → 400 Bad Request.")
+    else:
+        print(f"  → key length {len(SUPABASE_KEY)} (clean service-role JWT is 221).")
     sb = supabase_client()
     with open(local_path, "rb") as f:
         data = f.read()

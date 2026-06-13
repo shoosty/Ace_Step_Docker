@@ -1,9 +1,10 @@
 FROM --platform=linux/amd64 runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04
 
-# ACE-Step 1.5 XL — v54
+# ACE-Step 1.5 XL — v55
 # PyTorch 2.8, CUDA 12.8, official ACE-Step 1.5 requirements
-# v54: startup prints env diagnostic so the worker log reveals
-#      missing / malformed Supabase keys without leaking the value
+# v55: reprints env diag INSIDE every job (not just on container
+#      startup) so the diagnostic sits adjacent to the upload
+#      failure traceback in the per-job log
 
 RUN apt-get update && apt-get install -y git curl ffmpeg && apt-get clean
 
