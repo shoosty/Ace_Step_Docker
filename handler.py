@@ -66,11 +66,50 @@ if not shutil.which("ffmpeg"):
 # SUPABASE_SECRET_KEY is Supabase's "secret API key" format. Either
 # is valid against Supabase Storage with full bucket permissions.
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_KEY = (
-    os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
-    or os.environ.get("SUPABASE_SECRET_KEY")
-)
+SUPABASE_SERVICE_ROLE_KEY_RAW = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+SUPABASE_SECRET_KEY_RAW = os.environ.get("SUPABASE_SECRET_KEY")
+SUPABASE_KEY = SUPABASE_SERVICE_ROLE_KEY_RAW or SUPABASE_SECRET_KEY_RAW
 ACESTEP_BUCKET = os.environ.get("ACESTEP_BUCKET", "song-uploads")
+
+# v54 diagnostic — Stephen 2026-06-13: the "RLS 403" we keep seeing
+# from RunPod is almost certainly a missing/malformed env var, not a
+# Supabase storage policy. Print exactly what env state the worker
+# sees at container startup so the worker log tells the truth:
+#   - which keys are present
+#   - their lengths (a clean service-role JWT is ~221 chars; a paste
+#     with embedded newlines / chat fragments will be longer or be
+#     visibly noisy)
+#   - first 6 + last 6 chars (not enough to leak the secret, enough
+#     to confirm it starts with eyJ and ends with the right tail)
+def _diag_keyfrag(name: str, value: str | None) -> str:
+    if value is None:
+        return f"{name}=<UNSET>"
+    # Strip surrounding whitespace for the length report so we'd see
+    # the difference between a clean 221-char JWT and a multi-line
+    # paste of the same key.
+    clean_len = len(value)
+    stripped_len = len(value.strip())
+    has_newline = "\n" in value or "\r" in value
+    head = value[:6] if clean_len >= 6 else value
+    tail = value[-6:] if clean_len >= 6 else ""
+    extras = ""
+    if has_newline:
+        extras += " HAS_NEWLINES!"
+    if stripped_len != clean_len:
+        extras += f" trailing_ws={clean_len - stripped_len}"
+    return f"{name} len={clean_len} head='{head}' tail='{tail}'{extras}"
+
+print("[v54 env diag]")
+print(f"  SUPABASE_URL={SUPABASE_URL!r}")
+print(f"  {_diag_keyfrag('SUPABASE_SERVICE_ROLE_KEY', SUPABASE_SERVICE_ROLE_KEY_RAW)}")
+print(f"  {_diag_keyfrag('SUPABASE_SECRET_KEY', SUPABASE_SECRET_KEY_RAW)}")
+print(f"  ACESTEP_BUCKET={ACESTEP_BUCKET!r}")
+if SUPABASE_KEY is None:
+    print("  → NO Supabase key visible. Upload will fail with the same error.")
+elif "\n" in (SUPABASE_KEY or ""):
+    print("  → key contains newline(s). Re-paste cleanly in RunPod's env field.")
+else:
+    print(f"  → using key of length {len(SUPABASE_KEY)} for upload.")
 
 _supabase_client = None
 def supabase_client():

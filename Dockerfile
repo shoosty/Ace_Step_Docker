@@ -1,8 +1,9 @@
 FROM --platform=linux/amd64 runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04
 
-# ACE-Step 1.5 XL — v53
+# ACE-Step 1.5 XL — v54
 # PyTorch 2.8, CUDA 12.8, official ACE-Step 1.5 requirements
-# v53: handler accepts SUPABASE_SERVICE_ROLE_KEY OR SUPABASE_SECRET_KEY
+# v54: startup prints env diagnostic so the worker log reveals
+#      missing / malformed Supabase keys without leaking the value
 
 RUN apt-get update && apt-get install -y git curl ffmpeg && apt-get clean
 
