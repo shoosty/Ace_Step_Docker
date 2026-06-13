@@ -1,6 +1,6 @@
 FROM --platform=linux/amd64 runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04
 
-# ACE-Step 1.5 XL — v56
+# ACE-Step 1.5 XL — v57
 # PyTorch 2.8, CUDA 12.8, official ACE-Step 1.5 requirements
 # v56: silences the worker-startup warnings + enables the upgrades
 #      Stephen flagged as "LoRA is the moat, speed is the margin":
@@ -9,6 +9,11 @@ FROM --platform=linux/amd64 runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-u
 #        + pytorch_wavelets + PyWavelets             (DCW quality filter)
 #      flash_attn intentionally still NOT installed per Stephen's
 #      "until this is solid" rule.
+# v57: handler-only change — size-aware WAV upload. 12-min songs
+#      blow past Supabase's 50 MB per-object cap; v57 skips the WAV
+#      and returns the song from the MP3 alone instead of failing
+#      the whole job. No deps changed, but bumping the tag so the
+#      endpoint cache flips.
 
 RUN apt-get update && apt-get install -y git curl ffmpeg && apt-get clean
 

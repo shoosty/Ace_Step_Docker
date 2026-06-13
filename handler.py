@@ -1,4 +1,16 @@
-"""ACE-Step v41 — 1.5 XL with proper handler architecture."""
+"""ACE-Step v57 — 1.5 XL with proper handler architecture.
+
+v57 (Stephen 2026-06-13): the 12-minute song test reached end-of-
+generation cleanly but failed when uploading the ~120MB WAV to
+Supabase Storage — Storage rejects single objects over its
+per-object cap with HTTP 413 ("Payload too large"). MP3 was already
+uploaded successfully as the primary. v57 makes the keep_wav path
+size-aware: if the WAV exceeds SUPABASE_MAX_OBJECT_BYTES (default
+~49 MB to stay under the standard 50 MB cap with some headroom),
+we skip the WAV upload, log a warning, and return the response
+with `wav_skipped: true` so the caller can render the song from
+the MP3 alone. We also catch upload-time exceptions and tag them
+the same way — a 413 from the API still gracefully degrades."""
 import runpod
 import sys
 import os
@@ -70,6 +82,15 @@ SUPABASE_SERVICE_ROLE_KEY_RAW = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
 SUPABASE_SECRET_KEY_RAW = os.environ.get("SUPABASE_SECRET_KEY")
 SUPABASE_KEY = SUPABASE_SERVICE_ROLE_KEY_RAW or SUPABASE_SECRET_KEY_RAW
 ACESTEP_BUCKET = os.environ.get("ACESTEP_BUCKET", "song-uploads")
+
+# v57 — Supabase Storage rejects single objects over its per-object
+# cap with HTTP 413 ("Payload too large"). The standard cap is 50 MB;
+# we default to 49 MB to leave a sliver of multipart-overhead room.
+# Operators can raise this with the env var if they've bumped their
+# Storage settings.
+SUPABASE_MAX_OBJECT_BYTES = int(
+    os.environ.get("SUPABASE_MAX_OBJECT_BYTES", str(49 * 1024 * 1024))
+)
 
 # v54 diagnostic — Stephen 2026-06-13: the "RLS 403" we keep seeing
 # from RunPod is almost certainly a missing/malformed env var, not a
@@ -272,9 +293,46 @@ def handler(job):
             }
 
             if keep_wav:
-                wav_url = upload_to_supabase(wav_path, storage_path_wav, "audio/wav")
-                resp["wav_url"] = wav_url
-                resp["wav_storage_path"] = storage_path_wav
+                wav_bytes = os.path.getsize(wav_path)
+                # v57 — Long songs blow past Supabase's per-object cap.
+                # The primary MP3 has already uploaded by the time we
+                # get here, so a 413 on the WAV shouldn't lose us the
+                # whole job. Pre-check the size; fall back to a graceful
+                # response so the caller (which gets the song from
+                # audio_url) is unaffected.
+                if wav_bytes > SUPABASE_MAX_OBJECT_BYTES:
+                    print(
+                        f"[v57 wav-skip] wav_bytes={wav_bytes} "
+                        f"cap={SUPABASE_MAX_OBJECT_BYTES} — "
+                        "skipping WAV upload (over per-object cap). "
+                        "MP3 already uploaded; song is still usable."
+                    )
+                    resp["wav_skipped"] = True
+                    resp["wav_skipped_reason"] = "size_exceeds_supabase_cap"
+                    resp["wav_bytes"] = wav_bytes
+                    resp["wav_storage_path"] = storage_path_wav  # for debugging
+                else:
+                    try:
+                        wav_url = upload_to_supabase(
+                            wav_path, storage_path_wav, "audio/wav"
+                        )
+                        resp["wav_url"] = wav_url
+                        resp["wav_storage_path"] = storage_path_wav
+                    except Exception as wav_err:
+                        # Belt-and-suspenders: if the cap check was wrong
+                        # (operator bumped Supabase but didn't bump our
+                        # env), still don't lose the job.
+                        print(
+                            f"[v57 wav-skip] upload raised "
+                            f"({type(wav_err).__name__}: {wav_err}). "
+                            "MP3 already saved; reporting skip."
+                        )
+                        resp["wav_skipped"] = True
+                        resp["wav_skipped_reason"] = (
+                            f"upload_error:{type(wav_err).__name__}"
+                        )
+                        resp["wav_bytes"] = wav_bytes
+                        resp["wav_storage_path"] = storage_path_wav
 
             if return_b64:
                 with open(primary_local, "rb") as f:
